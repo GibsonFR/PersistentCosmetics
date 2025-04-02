@@ -1,8 +1,9 @@
 # PersistentCosmetics
 
 ## Features
-- Save any cosmetic item from your inventory **permanently**, even after trading or selling it.
-- Customize and manage your outfit directly in-game.
+- Save any cosmetic outfit from your inventory **permanently**, even after trading or selling items on this outfit.
+- Manage your outfit directly in-game.
+- Loop option to display them
 
 ---
 
