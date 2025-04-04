@@ -4,6 +4,8 @@
 - Save any cosmetic outfit from your inventory **permanently**, even after trading or selling items on this outfit.
 - Manage your outfit directly in-game.
 - Loop option to display them
+- Outfit Visualizer
+- Auto apply last equipped outfit when entering new game
 
 ---
 
