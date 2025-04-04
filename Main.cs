@@ -1,11 +1,4 @@
-﻿using SteamworksNative;
-using System.Diagnostics;
-using System.Security.Cryptography;
-using static PersistentCosmetics.MainConstants;
-using static PersistentCosmetics.MainUtility;
-using static System.Net.WebRequestMethods;
-
-namespace PersistentCosmetics
+﻿namespace PersistentCosmetics
 {
     public class MainConstants
     {
@@ -36,19 +29,6 @@ namespace PersistentCosmetics
             clientId = (ulong)__instance.field_Private_CSteamID_0;
 
             persistentCosmeticsFilePath = $"{persistentCosmeticsFilePath}_{clientId}.txt";
-        }
-
-        [HarmonyPatch(typeof(SteamManager), nameof(SteamManager.Update))]
-        [HarmonyPostfix]
-        public static void OnSteamManagerUpdatePost()
-        {
-            if (Input.GetKey(KeyCode.LeftControl) && Input.GetKeyDown(KeyCode.G))
-            {
-                foreach (var inventory in MonoBehaviourPublicStCaSt1ObSthaUIStmaUnique.otherPlayerInventories)
-                {
-                    Plugin.Instance.Log.LogInfo(BitConverter.ToString(inventory.Value.field_Public_ArrayOf_Byte_0));
-                }
-            }
         }
     }
     public class MainUtility

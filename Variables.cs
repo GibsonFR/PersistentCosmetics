@@ -17,24 +17,26 @@ namespace PersistentCosmetics
         public static PlayerInventory __PlayerInventory;
 
         // List
-        public static readonly List<Il2CppStructArray<byte>> itemsList = [];
+        public static readonly List<Il2CppStructArray<byte>> cosmeticsList = [];
   
         // string
         public static string menuKey, waitingForRenameHash = null;
 
         // int 
-        public static int itemPageIndex = 0, itemsPerPage = 4, loopIndex = 0;
+        public static int outfitPageIndex = 0, outfitsPerPage = 4, loopIndex = 0;
 
         //float 
-        public static float loopDelay = 1000f;
+        public static float loopDelay = 1000f, orbitSpeed = 72f;
 
         // ulong
         public static ulong clientId, hostId;
 
         // bool
-        public static bool configOnStart, menuTrigger, logOutfit, loopMode, loopFavoritesOnly;
+        public static bool configOnStart, menuTrigger, logOutfit, loopMode, loopFavoritesOnly, autoEquipLastOutfit = true;
 
         // SortMode
         public static SortMode currentSortMode = SortMode.Order;
+
+        public static Il2CppStructArray<byte> lastEquippedOutfit, currentSelectedOutfit;
     }
 }

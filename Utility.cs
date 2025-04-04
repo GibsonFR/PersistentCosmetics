@@ -89,21 +89,6 @@
         }
 
         /// <summary>
-        /// Sends a server-wide chat message visible to all players.
-        /// </summary>
-        public static void SendServerMessage(string message)
-        {
-            try
-            {
-                ServerSend.SendChatMessage(1, $"{message}");
-            }
-            catch (Exception ex)
-            {
-                Log(logFilePath, $"Error sending server message: {ex.Message}");
-            }
-        }
-
-        /// <summary>
         /// Creates or updates the configuration file with default values if missing.
         /// </summary>
         public static void SetConfigFile(string configFilePath)
@@ -112,8 +97,11 @@
             {
                 Dictionary<string, string> configDefaults = new()
                 {
-                    {"version", "v1.0.0"},
+                    {"version", "v1.1.0"},
                     {"menuKey", "insert"},
+                    {"outfitsPerPage", "4"},
+                    {"orbitSpeed", "72"},
+                    {"autoEquipLastOutfit", "true"}
                 };
 
                 Dictionary<string, string> currentConfig = [];
@@ -171,6 +159,7 @@
                 bool parseSuccess;
                 bool resultBool;
                 float resultFloat;
+                int resultInt;
 
                 foreach (string line in lines)
                 {
@@ -189,6 +178,15 @@
                 }
 
                 menuKey = config["menuKey"];
+
+                parseSuccess = int.TryParse(config["outfitsPerPage"], NumberStyles.Any, cultureInfo, out resultInt);
+                outfitsPerPage = parseSuccess ? resultInt : 4;
+
+                parseSuccess = float.TryParse(config["orbitSpeed"], NumberStyles.Any, cultureInfo, out resultFloat);
+                orbitSpeed = parseSuccess ? resultFloat : 72f;
+
+                parseSuccess = bool.TryParse(config["autoEquipLastOutfit"], out resultBool);
+                autoEquipLastOutfit = parseSuccess ? resultBool : true;
             }
             catch (Exception ex)
             {

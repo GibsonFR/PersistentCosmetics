@@ -3,6 +3,7 @@ using static PersistentCosmetics.MenuManager;
 using static PersistentCosmetics.MenuConstants;
 
 using static PersistentCosmetics.PersitentCosmeticsUtility;
+using Il2CppSystem.Dynamic.Utils;
 
 namespace PersistentCosmetics
 {
@@ -10,68 +11,57 @@ namespace PersistentCosmetics
     {
         public const string MENU_ON_MSG = "■<color=orange>PersistentCosmetics Menu <color=blue>ON</color></color>■";
         public const string MENU_OFF_MSG = "■<color=orange>PersistentCosmetics Menu <color=red>OFF</color></color>■";
+
+        public const string SELECTED_PREFIX = "■<color=yellow>";
+        public const string SELECTED_SUFFIX = "</color>■";
+        public const string UNSELECTED_PREFIX = "  ";
+        public const string UNSELECTED_SUFFIX = "";
+        public const string MENU_SEPARATOR_PREFIX = "      ";
+        public const int MENU_SEPARATOR_LENGTH = 100;
+
+        public const int SCROLL_STEP_OVER_1000 = 1000;
+        public const int SCROLL_STEP_OVER_50 = 50;
+        public const int SCROLL_STEP_DEFAULT = 1;
+        public const int MIN_LOOP_DELAY = 16;
+        public const int MAX_LOOP_DELAY = 10000;
+
+        public static readonly Color TEXT_OUTLINE_COLOR = new(1f, 1f, 1f, 0.7f);
+        public static readonly Vector2 TEXT_OUTLINE_DISTANCE_PRIMARY = new(0.25f, -0.25f);
+        public static readonly Vector2 TEXT_OUTLINE_DISTANCE_SECONDARY = new(0.5f, -0.5f);
     }
 
-    public class MenuButton
+    public class MenuButton(string label, Action action = null, Func<string> status = null,
+                      List<MenuButton> subMenu = null,
+                      bool isScrollable = false,
+                      Action<int> setter = null, Func<int> getter = null,
+                      Func<int> scrollMin = null, Func<int> scrollMax = null,
+                      Func<MenuButton, bool, string> customFormatter = null)
     {
-        public string Label { get; }
-        public Action Action { get; }
-        public Func<string> Status { get; }
-        public List<MenuButton> SubMenu { get; }
+        public string Label { get; } = label;
+        public Action Action { get; } = action;
+        public Func<string> Status { get; } = status;
+        public List<MenuButton> SubMenu { get; } = subMenu;
 
-        public bool IsScrollable { get; }
-        private readonly Action<int> _setter;
-        private readonly Func<int> _getter;
+        public bool IsScrollable { get; } = isScrollable;
 
-        public int ScrollValue => _getter != null ? _getter() : 0;
-
-        private readonly Func<int> _scrollMinFunc;
-        private readonly Func<int> _scrollMaxFunc;
-
-        private readonly Func<MenuButton, bool, string> _customFormatter;
-
-        public MenuButton(string label, Action action = null, Func<string> status = null,
-                          List<MenuButton> subMenu = null,
-                          bool isScrollable = false,
-                          Action<int> setter = null, Func<int> getter = null,
-                          Func<int> scrollMin = null, Func<int> scrollMax = null,
-                          Func<MenuButton, bool, string> customFormatter = null)
+        public void AdjustScrollValue(int delta, bool stepMode)
         {
-            Label = label;
-            Action = action;
-            Status = status;
-            SubMenu = subMenu;
-
-            IsScrollable = isScrollable;
-            _setter = setter;
-            _getter = getter;
-
-            _scrollMin = scrollMin;
-            _scrollMax = scrollMax;
-            _customFormatter = customFormatter;
-        }
-
-        public void AdjustScrollValue(int delta)
-        {
-            if (IsScrollable && _getter != null && _setter != null && scrollMin.HasValue && scrollMax.HasValue)
+            if (IsScrollable && getter != null && setter != null && scrollMin.HasValue && scrollMax.HasValue)
             {
-                int current = _getter();
+                int current = getter();
                 int step = 1;
 
-                if (Label.Contains("Speed") || Label.Contains("Delay") || Label.Contains("ms"))
+                if (stepMode)
                 {
-                    int projected = current + delta;
+                    int nextValue = current + delta;
 
-                    if (projected >= 1000)
-                        step = 1000;
-                    else if (projected >= 50)
-                        step = 50;
-                    else 
-                        step = 1;
+                    if (nextValue > 1000) step = SCROLL_STEP_OVER_1000;
+                    else if (nextValue > 50) step = SCROLL_STEP_OVER_50;
+                    else step = SCROLL_STEP_DEFAULT;
                 }
 
                 int newValue = Mathf.Clamp(current + delta * step, scrollMin.Value, scrollMax.Value);
-                _setter(newValue);
+                setter(newValue);
             }
         }
 
@@ -79,12 +69,12 @@ namespace PersistentCosmetics
 
         public string GetFormattedLabel(bool isSelected)
         {
-            if (_customFormatter != null)
-                return _customFormatter(this, isSelected);
+            if (customFormatter != null)
+                return customFormatter(this, isSelected);
 
-            string prefix = isSelected ? "■<color=yellow>" : "  ";
-            string suffix = isSelected ? "</color>■" : "";
-            string scrollableValue = IsScrollable ? $"<color=green>{_getter()}</color>" : "";
+            string prefix = isSelected ? SELECTED_PREFIX : UNSELECTED_PREFIX;
+            string suffix = isSelected ? SELECTED_SUFFIX : UNSELECTED_SUFFIX;
+            string scrollableValue = IsScrollable ? $"<color=green>{getter()}</color>" : "";
             return $"{prefix}{Label}{suffix} {Status?.Invoke()} {scrollableValue}";
         }
 
@@ -93,60 +83,53 @@ namespace PersistentCosmetics
         private int? scrollMin => _scrollMin?.Invoke();
         private int? scrollMax => _scrollMax?.Invoke();
 
-        private readonly Func<int> _scrollMin;
-        private readonly Func<int> _scrollMax;
+        private readonly Func<int> _scrollMin = scrollMin;
+        private readonly Func<int> _scrollMax = scrollMax;
     }
+
     public class MenuManager : MonoBehaviour
     {
         public Text menuText;
+        public Text menuTextOutline;
 
-        private int selectedIndex;
+        public static int selectedIndex;
         public static List<MenuButton> currentMenu;
         private Stack<(List<MenuButton> menu, int index)> menuStack;
         public static bool scrollingMode = false;
         private float elapsedTime = 0f;
 
+        public static List<Il2CppStructArray<byte>> allItemsCache;
+        public static List<Il2CppStructArray<byte>> favoritesCache;
+        public static bool cacheDirty = true;
+
         void Awake()
         {
             LoadFromFile();
+            SaveToFile();
+
+            RefreshMainMenu();
+
+            if (autoEquipLastOutfit && currentSelectedOutfit.Length > 50) ClientSend.SendSerializedInventory(currentSelectedOutfit, currentSelectedOutfit.Length); 
         }
+
         void Start()
         {
             menuStack = new Stack<(List<MenuButton>, int)>();
-
-            currentMenu =
-            [
-                new("Persistent Cosmetics", subMenu: BuildItemBrowserMenu()),
-            ];
+            RefreshMainMenu();
+            EnsureTextOutline(menuTextOutline);
         }
 
-        void BackGroundColor(bool trigger)
-        {
-            if (trigger)
-            {
-                Cursor.lockState = CursorLockMode.Locked;
-                Cursor.visible = false;
-
-                GameObject.Find("GameUI/Pause/Overlay").SetActive(false);
-                GameObject.Find("GameUI/Pause/Overlay/Menu").SetActive(true);
-            }
-            else
-            {
-                GameObject.Find("GameUI/Pause/Overlay").SetActive(true);
-                GameObject.Find("GameUI/Pause/Overlay/Menu").SetActive(false);
-            }
-        }
-
-       
         void Update()
         {
             elapsedTime += Time.deltaTime;
+
+            if (cacheDirty) RebuildCaches();
 
             if (Input.GetKeyDown(menuKey))
             {
                 menuTrigger = !menuTrigger;
                 menuText.text = menuTrigger ? MENU_ON_MSG : MENU_OFF_MSG;
-                BackGroundColor(!menuTrigger);
+                ToggleBackgroundOverlay(menuTrigger);
                 PlayMenuSound();
             }
 
@@ -155,23 +138,10 @@ namespace PersistentCosmetics
                 HandleNavigation();
                 HandleSelection();
             }
-            else menuText.text = "";
-
-
-            if (loopMode && elapsedTime >= (loopDelay / 1000))
+            else
             {
-                elapsedTime = 0f;
-
-                var list = loopFavoritesOnly
-                    ? GetAllItems().Where(i => favoriteOutfits.Contains(ComputeOutfitHash(i))).ToList()
-                    : GetAllItems();
-
-                if (list.Count > 0)
-                {
-                    var item = list[loopIndex % list.Count];
-                    ClientSend.SendSerializedInventory(item, item.Length);
-                    loopIndex++;
-                }
+                menuText.text = "";
+                menuTextOutline.text = "";
             }
         }
 
@@ -180,8 +150,29 @@ namespace PersistentCosmetics
             if (menuTrigger)
             {
                 RenderMenu();
-                BackGroundColor(!menuTrigger);
+                ToggleBackgroundOverlay(menuTrigger);
             }
+
+            if (loopMode && elapsedTime >= (loopDelay / 1000f))
+            {
+                elapsedTime = 0f;
+                var list = loopFavoritesOnly ? favoritesCache : allItemsCache;
+                if (list.Count > 0)
+                {
+                    var item = list[loopIndex % list.Count];
+                    currentSelectedOutfit = item;
+                    ClientSend.SendSerializedInventory(item, item.Length);
+                    loopIndex++;
+                }
+            }
+        }
+
+        public static void RefreshMainMenu()
+        {
+            scrollingMode = false;
+            selectedIndex = 0;
+            RebuildCaches();
+            currentMenu = BuildCosmeticBrowserMenu();
         }
 
         void HandleNavigation()
@@ -193,7 +184,7 @@ namespace PersistentCosmetics
             {
                 if (selectedButton.IsScrollable && Mathf.Abs(scroll) > 0f)
                 {
-                    selectedButton.AdjustScrollValue(scroll > 0f ? -1 : 1);
+                    selectedButton.AdjustScrollValue(scroll > 0f ? -1 : 1, true);
                     PlayMenuSound();
                 }
 
@@ -226,12 +217,54 @@ namespace PersistentCosmetics
             if (Input.GetMouseButtonDown(2) && menuStack.Count > 0)
             {
                 (currentMenu, selectedIndex) = menuStack.Pop();
-                currentMenu = BuildItemBrowserMenu();
+                scrollingMode = false;
                 PlayMenuSound();
             }
         }
 
+        private void EnsureTextOutline(Text text)
+        {
+            if (text == null) return;
 
+            var existingOutline = text.GetComponent<Outline>();
+            if (existingOutline == null)
+            {
+                var outline = text.gameObject.AddComponent<Outline>();
+                outline.effectColor = TEXT_OUTLINE_COLOR;
+                outline.effectDistance = TEXT_OUTLINE_DISTANCE_PRIMARY;
+                outline.useGraphicAlpha = true;
+            }
+            else
+            {
+                existingOutline.effectColor = TEXT_OUTLINE_COLOR;
+                existingOutline.effectDistance = TEXT_OUTLINE_DISTANCE_PRIMARY;
+            }
+        }
+
+        void ToggleBackgroundOverlay(bool enable)
+        {
+            if (enable)
+            {
+                GameObject.Find("GameUI/Pause/Overlay").SetActive(true);
+                GameObject.Find("GameUI/Pause/Overlay/Menu").SetActive(false);
+            }
+            else
+            {
+                Cursor.lockState = CursorLockMode.Locked;
+                Cursor.visible = false;
+
+                GameObject.Find("GameUI/Pause/Overlay").SetActive(false);
+                GameObject.Find("GameUI/Pause/Overlay/Menu").SetActive(true);
+            }
+        }
+
+        public static void RebuildCaches()
+        {
+            var all = GetAllCosmetics().ToList();
+            allItemsCache = all;
+            favoritesCache = all.Where(i => favoriteOutfits.Contains(ComputeOutfitHash(i))).ToList();
+            cacheDirty = false;
+        }
 
         void HandleSelection()
         {
@@ -252,19 +285,61 @@ namespace PersistentCosmetics
         }
         void RenderMenu()
         {
-            var totalItems = GetAllItems().Count;
+            int totalOutfits = allItemsCache?.Count ?? 0;
 
             string sortDisplay = $"<color=orange>{currentSortMode}</color>";
-            string header = $"      Outfits: <b>{totalItems}</b> | Sort: {sortDisplay} | Page: <b>{itemPageIndex + 1}</b>";
+            string header = $"      Outfits: <b>{totalOutfits}</b> | Sort: {sortDisplay} | Page: <b>{outfitPageIndex + 1}</b>";
 
-            string separator = "      " + new string('_', 100);
+            string separator = MENU_SEPARATOR_PREFIX + new string('_', MENU_SEPARATOR_LENGTH);
 
             var menuLines = currentMenu.Select((btn, index) =>
                 "      " + btn.GetFormattedLabel(index == selectedIndex));
 
-            menuText.text = $"\n{header}\n{separator}\n\n{string.Join("\n", menuLines)}";
+            string fullText = $"\n{header}\n{separator}\n\n{string.Join("\n", menuLines)}";
+
+            menuText.text = RemoveNoblurTags(fullText);
+            menuTextOutline.text = ExtractNoblurText(fullText);
         }
 
+        private string ExtractNoblurText(string input)
+        {
+            string marked = System.Text.RegularExpressions.Regex.Replace(
+                input,
+                @"<noblur>(.*?)</noblur>",
+                "<!NOBLUR_START!>$1<!NOBLUR_END!>",
+                System.Text.RegularExpressions.RegexOptions.Singleline
+            );
+
+            var lines = marked.Split('\n');
+
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (lines[i].Contains("<!NOBLUR_START!>"))
+                {
+                    lines[i] = System.Text.RegularExpressions.Regex.Replace(
+                        lines[i],
+                        @"<!NOBLUR_START!>(.*?)<!NOBLUR_END!>",
+                        "<color=black>$1</color>"
+                    );
+                }
+                else
+                {
+                    lines[i] = new string(' ', lines[i].Length); 
+                }
+            }
+
+            return string.Join("\n", lines);
+        }
+
+        private string RemoveNoblurTags(string input)
+        {
+            return System.Text.RegularExpressions.Regex.Replace(
+                input,
+                @"<noblur>(.*?)</noblur>",
+                "$1",
+                System.Text.RegularExpressions.RegexOptions.Singleline
+            );
+        }
     }
 
     public class MenuPatches
@@ -288,7 +363,7 @@ namespace PersistentCosmetics
 
             waitingForRenameHash = null;
             SaveToFile();
-            currentMenu = BuildItemBrowserMenu();
+            RefreshMainMenu();
 
             return false;
         }
@@ -308,50 +383,60 @@ namespace PersistentCosmetics
             Favorite
         }
 
-        private static readonly HashSet<string> UnityRichTextColors =
-        [
+        public static readonly HashSet<string> UNITY_RICH_TEXT_COLORS = new()
+        {
             "red", "green", "blue", "yellow", "black", "white", "grey",
             "cyan", "magenta", "gray", "orange", "purple", "brown"
-        ];
+        };
 
-        private static readonly Dictionary<string, string> RichTextColorFallbacks = new()
+        public static readonly Dictionary<string, string> COLOR_FALLBACKS = new()
         {
             { "light blue", "cyan" },
             { "golden", "yellow" },
             { "pink", "magenta" },
             { "gray", "grey" },
-            { "blond", "#FFFACD" }
+            { "blond", "#EBD672" },
+            { "creme", "#EBD672" }
         };
 
-        public static List<MenuButton> BuildItemBrowserMenu()
+        public static string FormatMenuLabel(string label, bool selected, string extra = "")
         {
-            List<Il2CppStructArray<byte>> allOutfits = GetAllItems();
+            string prefix = selected ? SELECTED_PREFIX : UNSELECTED_PREFIX;
+            string suffix = selected ? SELECTED_SUFFIX : UNSELECTED_SUFFIX;
+            return $"{prefix}{label}{suffix} {extra}";
+        }
+
+        public static List<MenuButton> BuildCosmeticBrowserMenu()
+        {
+            List<Il2CppStructArray<byte>> allOutfits = allItemsCache ?? [];
 
             IEnumerable<Il2CppStructArray<byte>> sorted = currentSortMode switch
             {
-                SortMode.Size => allOutfits.OrderByDescending(o => ExtractItemsFromOutfit(o).Count),
-                SortMode.Favorite => allOutfits.OrderByDescending(o => favoriteOutfits.Contains(ComputeOutfitHash(o))),
-                _ => allOutfits 
+                SortMode.Size => allOutfits.OrderByDescending(o => ExtractCosmeticsFromOutfit(o).Count),
+                SortMode.Favorite => allOutfits
+                    .OrderByDescending(o => favoriteOutfits.Contains(ComputeOutfitHash(o)))
+                    .ThenByDescending(o => ExtractCosmeticsFromOutfit(o).Count),
+                _ => allOutfits
             };
 
-            var sortedItems = sorted.ToList();
-            int totalPages = Mathf.CeilToInt((float)sortedItems.Count / itemsPerPage);
-            itemPageIndex = Mathf.Clamp(itemPageIndex, 0, Mathf.Max(0, totalPages - 1));
+            List<Il2CppStructArray<byte>> sortedItems = sorted.ToList();
+            int totalPages = Mathf.CeilToInt((float)sortedItems.Count / outfitsPerPage);
+            outfitPageIndex = Mathf.Clamp(outfitPageIndex, 0, Mathf.Max(0, totalPages - 1));
 
-            var pageItems = sortedItems
-                .Skip(itemPageIndex * itemsPerPage)
-                .Take(itemsPerPage)
+            List<Il2CppStructArray<byte>> pageItems = sortedItems
+                .Skip(outfitPageIndex * outfitsPerPage)
+                .Take(outfitsPerPage)
                 .ToList();
 
-            var controlButtons = new List<MenuButton>
+            List<MenuButton> controlButtons = new List<MenuButton>
             {
                 new("Log Outfit", () =>
                 {
                     ToggleBoolean(ref logOutfit, "Log Outfit");
                     Packet packet = new((int)ServerSendType.requestCosmetics);
                     packet.Method_Public_Void_UInt64_0(clientId);
-
                     ClientHandle.ServerRequestsCosmetics(packet);
+
                 }, () => logOutfit ? "<color=blue>ON</color>" : "<color=red>OFF</color>"),
                 new("Open Inventory", () => {
                     GameObject.Find("GameUI/Pause/Overlay/Inventory").SetActive(true);
@@ -369,16 +454,12 @@ namespace PersistentCosmetics
                         getter: () => (int)loopDelay,
                         setter: (val) =>
                         {
-                            loopDelay = Mathf.Clamp(val, 16, 10000);
+                            loopDelay = Mathf.Clamp(val, MIN_LOOP_DELAY, MAX_LOOP_DELAY);
                         },
-                        scrollMin: () => 16,
-                        scrollMax: () => 10000,
-                        customFormatter: (btn, selected) =>
-                        {
-                            string prefix = selected ? "■<color=yellow>" : "  ";
-                            string suffix = selected ? "</color>■" : "";
-                            return $"{prefix}{btn.Label}{suffix} <color=green>{(int)loopDelay}ms</color>";
-                        }),
+                        scrollMin: () => MIN_LOOP_DELAY,
+                        scrollMax: () => MAX_LOOP_DELAY,
+                        customFormatter: (btn, selected) => FormatMenuLabel(btn.Label, selected, $"<color=green>{(int)loopDelay}ms</color>")
+                    ),
 
                     new("Scope: ", () =>
                     {
@@ -387,20 +468,29 @@ namespace PersistentCosmetics
                     },
                     () => loopFavoritesOnly ? "<color=yellow>[Favorites]</color>" : "<color=grey>[All]</color>")
                 ]),
-                new("▸ Sort by Order", () => { currentSortMode = SortMode.Order; currentMenu = BuildItemBrowserMenu(); }),
-                new("▸ Sort by Size", () => { currentSortMode = SortMode.Size; currentMenu = BuildItemBrowserMenu(); }),
-                new("▸ Sort by Favorite", () => { currentSortMode = SortMode.Favorite; currentMenu = BuildItemBrowserMenu(); }),
+                new("▸ Sort by Order", () => {
+                    currentSortMode = SortMode.Order;
+                    currentMenu = BuildCosmeticBrowserMenu();
+                }),
+                new("▸ Sort by Size", () => {
+                    currentSortMode = SortMode.Size;
+                    currentMenu = BuildCosmeticBrowserMenu();
+                }),
+                new("▸ Sort by Favorite", () => {
+                    currentSortMode = SortMode.Favorite;
+                    currentMenu = BuildCosmeticBrowserMenu();
+                }),
                 new("Page",
                     isScrollable: true,
-                    getter: () => itemPageIndex + 1,
-                    setter: (val) => { itemPageIndex = val - 1; currentMenu = BuildItemBrowserMenu(); },
+                    getter: () => outfitPageIndex + 1,
+                    setter: (val) => { outfitPageIndex = val - 1; currentMenu = BuildCosmeticBrowserMenu(); },
                     scrollMin: () => 1,
                     scrollMax: () => totalPages,
                     customFormatter: (btn, selected) =>
                     {
                         string prefix = selected ? "■<color=yellow>" : "  ";
                         string suffix = selected ? "</color>■" : "";
-                        return $"{prefix}{btn.Label}{suffix} <color=green>{itemPageIndex + 1}/{totalPages}</color>";
+                        return $"{prefix}{btn.Label}{suffix} <color=green>{outfitPageIndex + 1}/{totalPages}</color>";
                     }),
                 new("<color=grey><i>───── OUTFITS ─────</i></color>")
             };
@@ -419,7 +509,7 @@ namespace PersistentCosmetics
 
         public static MenuButton CreateOutfitButton(Il2CppStructArray<byte> item)
         {
-            var outfitItems = ExtractItemsFromOutfit(item);
+            var outfitItems = ExtractCosmeticsFromOutfit(item);
             string hash = ComputeOutfitHash(item);
             bool isFavorite = favoriteOutfits.Contains(hash);
             string fav = isFavorite ? " <color=yellow>★</color>" : "";
@@ -429,10 +519,10 @@ namespace PersistentCosmetics
             string status() =>
                 "\n" + string.Join("\n", outfitItems.Select((i, idx) =>
                 {
-                    string name = GetItemNameFromCosmeticArray(i);
-                    string color = GetItemTag(i, "color");
-                    string shiny = GetItemTag(i, "shiny");
-                    string brand = GetItemTag(i, "brand");
+                    string name = GetCosmeticNameFromCosmeticArray(i);
+                    string color = GetCosmeticTag(i, "color");
+                    string shiny = GetCosmeticTag(i, "shiny");
+                    string brand = GetCosmeticTag(i, "brand");
 
                     string coloredName = GetColoredText(color, $"<b>{name}</b>");
                     string safeShiny = string.IsNullOrWhiteSpace(shiny) ? "" : $"  {shiny}";
@@ -443,60 +533,63 @@ namespace PersistentCosmetics
                 }));
 
             return new MenuButton(label,
-                status: status,
-                subMenu: new List<MenuButton>
-                {
-            new(label, status: status),
-
-            new("Equip", () =>
-            {
-                logOutfit = false;
-                ClientSend.SendSerializedInventory(item, item.Length);
-                ForceMessage("Equipped outfit.");
-            }),
-
-            new("Rename", subMenu:
+            status: status,
+            subMenu:
             [
-                new("<i>Rename Outfit (type in chat)</i>", () =>
+                new(label, status: status),
+
+                new("Equip", () =>
                 {
-                    waitingForRenameHash = hash;
-                    ForceMessage("Now type the new outfit name in chat.");
+                    logOutfit = false;
+                    currentSelectedOutfit = item;
+                    ClientSend.SendSerializedInventory(item, item.Length);
+                    ForceMessage("Equipped outfit.");
                 }),
-                new("Cancel", () => currentMenu = BuildItemBrowserMenu())
-            ]),
 
-            new("<color=yellow>★</color> Toggle Favorite", () =>
-            {
-                if (favoriteOutfits.Contains(hash))
+                new("Rename", subMenu:
+                [
+                    new("<i>Rename Outfit (type in chat)</i>", () =>
+                    {
+                        waitingForRenameHash = hash;
+                        ForceMessage("Now type the new outfit name in chat.");
+                    }),
+                    new("Cancel", () => RefreshMainMenu())
+                ]),
+
+                new("<color=yellow>★</color> Toggle Favorite", () =>
                 {
-                    favoriteOutfits.Remove(hash);
-                    ForceMessage("Removed from favorites.");
-                }
-                else
-                {
-                    favoriteOutfits.Add(hash);
-                    ForceMessage("Marked as favorite.");
-                }
-                SaveToFile();
-
-                currentMenu = CreateOutfitButton(item).SubMenu;
-
-            }),
-
-            new("<color=red>Delete</color>", subMenu:
-            [
-                new("Cancel", () => currentMenu = BuildItemBrowserMenu()),
-                new("<color=red>Confirm Delete</color>", () =>
-                {
-                    itemsList.RemoveAll(i => i.ToArray().SequenceEqual(item.ToArray()));
-                    favoriteOutfits.Remove(hash);
-                    outfitNames.Remove(hash);
+                    if (favoriteOutfits.Contains(hash))
+                    {
+                        favoriteOutfits.Remove(hash);
+                        ForceMessage("Removed from favorites.");
+                    }
+                    else
+                    {
+                        favoriteOutfits.Add(hash);
+                        ForceMessage("Marked as favorite.");
+                    }
                     SaveToFile();
-                    ForceMessage("Outfit deleted.");
-                    currentMenu = BuildItemBrowserMenu();
-                })
-            ])
-                });
+
+                    cacheDirty = true;
+
+                    currentMenu = CreateOutfitButton(item).SubMenu;
+                }),
+
+                new("<color=red>Delete</color>", subMenu:
+                [
+                    new("Cancel", () => RefreshMainMenu()),
+                    new("<color=red>Confirm Delete</color>", () =>
+                    {
+                        cosmeticsList.RemoveAll(i => i.ToArray().SequenceEqual(item.ToArray()));
+                        favoriteOutfits.Remove(hash);
+                        outfitNames.Remove(hash);
+                        SaveToFile();
+
+                        ForceMessage("Outfit deleted.");
+                        RefreshMainMenu();
+                    })
+                ])
+            ]);
         }
 
         private static string GetColoredText(string color, string fallbackText = null)
@@ -504,26 +597,21 @@ namespace PersistentCosmetics
             if (string.IsNullOrWhiteSpace(color)) return fallbackText ?? "none";
 
             string raw = color.Trim().ToLower();
-            string safe = raw.Replace(" ", "");
 
-            if (safe == "black")
+            if (raw == "black")
             {
-                // Override pour éviter l'invisibilité
-                return $"<color=grey>{fallbackText ?? raw}</color>";
+                return $"<noblur><color=black>{fallbackText ?? raw}</color></noblur>";
             }
 
-            if (!UnityRichTextColors.Contains(safe))
+            if (!UNITY_RICH_TEXT_COLORS.Contains(raw))
             {
-                if (RichTextColorFallbacks.TryGetValue(raw, out string fallback))
+                if (COLOR_FALLBACKS.TryGetValue(raw, out var fallback))
                     return $"<color={fallback}>{fallbackText ?? raw}</color>";
-
                 return $"<color=white>{fallbackText ?? raw}</color>";
             }
 
-            return $"<color={safe}>{fallbackText ?? raw}</color>";
+            return $"<color={raw}>{fallbackText ?? raw}</color>";
         }
 
     }
 }
-
-

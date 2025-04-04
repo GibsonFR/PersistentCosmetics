@@ -1,4 +1,5 @@
-﻿using static PersistentCosmetics.PersitentCosmeticsUtility;
+﻿using System.Text.RegularExpressions;
+using static PersistentCosmetics.PersitentCosmeticsUtility;
 
 namespace PersistentCosmetics
 {
@@ -8,12 +9,18 @@ namespace PersistentCosmetics
         [HarmonyPrefix]
         static void OnClientSendSendSerializedInventory(Il2CppStructArray<byte> __0)
         {
-            logOutfit = false;
-            LoadFromFile();       
-            AddUnique(__0);
-            SaveToFile();
+            lastEquippedOutfit = __0;
+            OutfitVisualizerManager.ApplyLastEquippedOutfitTo(OutfitVisualizerManager.outfitPreviewPlayer);
+            if (!logOutfit || __0.Length < 50) return;
 
-            MenuManager.currentMenu = MenuUtility.BuildItemBrowserMenu();
+            logOutfit = false;
+            AddUnique(__0);       
+            SaveToFile();         
+            LoadFromFile();
+
+            MenuManager.cacheDirty = false;
+            MenuManager.RebuildCaches();
+            MenuManager.currentMenu = MenuUtility.BuildCosmeticBrowserMenu();
         }
     }
 
@@ -23,7 +30,7 @@ namespace PersistentCosmetics
         public static Dictionary<string, string> outfitNames = [];
         public static void LoadFromFile()
         {
-            itemsList.Clear();
+            cosmeticsList.Clear();
             outfitNames.Clear();
             favoriteOutfits.Clear();
 
@@ -38,49 +45,41 @@ namespace PersistentCosmetics
                 string hex = parts[0];
 
                 byte[] bytes = HexStringToByteArray(hex);
-                var item = new Il2CppStructArray<byte>(bytes.Length);
+                var cosmetic = new Il2CppStructArray<byte>(bytes.Length);
                 for (int i = 0; i < bytes.Length; i++)
-                    item[i] = bytes[i];
+                    cosmetic[i] = bytes[i];
 
-                itemsList.Add(item);
-                string hash = ComputeOutfitHash(item);
+                cosmeticsList.Add(cosmetic);
+                string hash = ComputeOutfitHash(cosmetic);
 
                 for (int i = 1; i < parts.Length; i++)
                 {
                     if (parts[i] == "FAV")
                         favoriteOutfits.Add(hash);
                     else
-                        outfitNames[hash] = parts[i]; 
+                        outfitNames[hash] = parts[i];
                 }
             }
         }
 
         public static void SaveToFile()
         {
-            using (StreamWriter writer = new StreamWriter(persistentCosmeticsFilePath, false))
+            using StreamWriter writer = new(persistentCosmeticsFilePath, false);
+            foreach (var cosmetic in cosmeticsList)
             {
-                foreach (var item in itemsList)
-                {
-                    string hex = BitConverter.ToString(item.ToArray()).Replace("-", "");
-                    string hash = ComputeOutfitHash(item);
+                string hex = BitConverter.ToString(cosmetic.ToArray()).Replace("-", "");
+                string hash = ComputeOutfitHash(cosmetic);
 
-                    List<string> metadata = new();
+                List<string> metadata = new();
 
-                    if (outfitNames.TryGetValue(hash, out string name))
-                        metadata.Add(name);
+                if (outfitNames.TryGetValue(hash, out string name)) metadata.Add(name);
 
-                    if (favoriteOutfits.Contains(hash))
-                        metadata.Add("FAV");
+                if (favoriteOutfits.Contains(hash)) metadata.Add("FAV");
 
-                    if (metadata.Count > 0)
-                        writer.WriteLine($"{hex}::{string.Join("::", metadata)}");
-                    else
-                        writer.WriteLine(hex);
-                }
+                if (metadata.Count > 0) writer.WriteLine($"{hex}::{string.Join("::", metadata)}");
+                else writer.WriteLine(hex);
             }
         }
-
-
 
         public static string ComputeOutfitHash(Il2CppStructArray<byte> data)
         {
@@ -89,12 +88,17 @@ namespace PersistentCosmetics
             return BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant();
         }
 
-        public static void AddUnique(Il2CppStructArray<byte> item)
+        private static bool AreArraysEqual(Il2CppStructArray<byte> a, Il2CppStructArray<byte> b)
         {
-            bool exists = itemsList.Any(existing =>
-                existing.Length == item.Length &&
-                existing.Where((t, i) => t != item[i]).Count() == 0
-            );
+            if (a.Length != b.Length) return false;
+            for (int i = 0; i < a.Length; i++)
+                if (a[i] != b[i]) return false;
+            return true;
+        }
+
+        public static void AddUnique(Il2CppStructArray<byte> outfit)
+        {
+            bool exists = cosmeticsList.Any(existing => AreArraysEqual(existing, outfit));
 
             if (exists)
             {
@@ -102,27 +106,13 @@ namespace PersistentCosmetics
                 return;
             }
 
-            itemsList.Add(item);
-            SaveToFile(); 
+            cosmeticsList.Add(outfit);
+            SaveToFile();
             ForceMessage("New Outfit Logged.");
         }
 
 
-        public static string GetItemId(Il2CppStructArray<byte> data)
-        {
-            string ascii = Encoding.ASCII.GetString(data.ToArray());
-            string key = "itemid\u0000";
-            int index = ascii.IndexOf(key);
-            if (index == -1) return null;
-
-            index += key.Length;
-            int end = ascii.IndexOf('\0', index);
-            if (end == -1) end = ascii.Length;
-
-            return ascii.Substring(index, end - index);
-        }
-
-        public static List<Il2CppStructArray<byte>> GetAllItems() => itemsList;
+        public static List<Il2CppStructArray<byte>> GetAllCosmetics() => cosmeticsList;
 
         private static byte[] HexStringToByteArray(string hex)
         {
@@ -135,7 +125,7 @@ namespace PersistentCosmetics
             return data;
         }
 
-        public static string GetItemNameFromCosmeticArray(Il2CppStructArray<byte> data)
+        public static string GetCosmeticNameFromCosmeticArray(Il2CppStructArray<byte> data)
         {
             byte[] bytes = data.ToArray();
             string ascii = Encoding.ASCII.GetString(bytes);
@@ -152,7 +142,7 @@ namespace PersistentCosmetics
 
             if (int.TryParse(itemdefidStr, out int itemdefid))
             {
-                return cosmeticsName.TryGetValue(itemdefid, out var name)
+                return COSMETIC_DEFID_TO_NAME.TryGetValue(itemdefid, out var name)
                     ? name
                     : $"Unknown (itemdefid: {itemdefid})";
             }
@@ -160,7 +150,7 @@ namespace PersistentCosmetics
             return "Invalid itemdefid format";
         }
 
-        public static Dictionary<int, string> cosmeticsName = new()
+        public static Dictionary<int, string> COSMETIC_DEFID_TO_NAME = new()
         {
             { 611, "Christmas Socks" }, { 223, "Elf Hat" }, { 610, "Elf Shoes" }, { 420, "Gingerbread Mask" },
             { 612, "Lucky Boots" }, { 222, "Lucky Hat" }, { 11, "Messy" }, { 219, "Party Hat" },
@@ -186,66 +176,74 @@ namespace PersistentCosmetics
             { 902, "Classic Backpack" }, { 903, "Norway Backpack" }
         };
 
-        public static string GetItemTag(Il2CppStructArray<byte> data, string tagName)
+        public static Dictionary<int, string> COSMETIC_DEFID_TO_CATEGORY = new()
+        {
+            // Hat
+            { 223, "Hat" }, { 222, "Hat" }, { 219, "Hat" }, { 220, "Hat" }, { 418, "Hat" },
+            { 216, "Hat" }, { 200, "Hat" }, { 203, "Hat" }, { 215, "Hat" }, { 209, "Hat" },
+            { 207, "Hat" }, { 212, "Hat" }, { 206, "Hat" }, { 201, "Hat" }, { 205, "Hat" },
+            { 204, "Hat" }, { 208, "Hat" }, { 213, "Hat" }, { 214, "Hat" }, { 210, "Hat" },
+            { 202, "Hat" }, { 211, "Hat" }, { 218, "Hat" }, { 217, "Hat" }, { 221, "Hat" },
+            { 224, "Hat" },
+
+            // Hair
+            { 11, "Hair" }, { 12, "Hair" }, { 7, "Hair" }, { 10, "Hair" }, { 4, "Hair" },
+            { 3, "Hair" }, { 1, "Hair" }, { 9, "Hair" }, { 6, "Hair" }, { 5, "Hair" },
+            { 2, "Hair" }, { 8, "Hair" },
+
+            // Face
+            { 420, "Face" }, { 419, "Face" }, { 417, "Face" }, { 412, "Face" }, { 404, "Face" },
+            { 411, "Face" }, { 408, "Face" }, { 403, "Face" }, { 414, "Face" }, { 416, "Face" },
+            { 415, "Face" }, { 405, "Face" }, { 407, "Face" }, { 413, "Face" }, { 400, "Face" },
+            { 402, "Face" }, { 401, "Face" }, { 409, "Face" }, { 410, "Face" }, { 406, "Face" },
+
+            // Shoes
+            { 611, "Shoes" }, { 610, "Shoes" }, { 612, "Shoes" }, { 608, "Shoes" }, { 607, "Shoes" },
+            { 604, "Shoes" }, { 605, "Shoes" }, { 602, "Shoes" }, { 601, "Shoes" }, { 600, "Shoes" },
+            { 606, "Shoes" }, { 603, "Shoes" }, { 609, "Shoes" },
+
+            // Backpack
+            { 900, "Backpack" }, { 901, "Backpack" }, { 902, "Backpack" }, { 903, "Backpack" },
+
+            // Top
+            { 801, "Top" }, { 0, "Top" }, { 800, "Top" },
+
+            // None
+            { 1008, "None" }, { 1000, "None" }, { 1001, "None" }, { 1002, "None" },
+            { 1003, "None" }, { 999, "None" }, { 1005, "None" }, { 997, "None" }
+        };
+
+
+
+        public static string GetCosmeticTag(Il2CppStructArray<byte> data, string tagName)
         {
             string ascii = Encoding.ASCII.GetString(data.ToArray());
-            string tagPrefix = $"{tagName}:";
-
-            int start = ascii.IndexOf(tagPrefix);
-            if (start == -1) return "";
-
-            start += tagPrefix.Length;
-
-            int endSemicolon = ascii.IndexOf(";", start);
-            int endNull = ascii.IndexOf("\x00", start);
-            int end = (endSemicolon != -1 && endNull != -1)
-                ? Math.Min(endSemicolon, endNull)
-                : (endSemicolon != -1 ? endSemicolon : (endNull != -1 ? endNull : ascii.Length));
-
-            string raw = ascii.Substring(start, end - start);
-            return new string(raw.Where(c => !char.IsControl(c)).ToArray()).Trim();
+            string pattern = $@"{Regex.Escape(tagName)}:(.*?)(;|\x00|$)";
+            var match = Regex.Match(ascii, pattern);
+            return match.Success ? match.Groups[1].Value.Trim() : "";
         }
 
-        public static List<Il2CppStructArray<byte>> ExtractItemsFromOutfit(Il2CppStructArray<byte> outfitData)
+        public static List<Il2CppStructArray<byte>> ExtractCosmeticsFromOutfit(Il2CppStructArray<byte> outfitData)
         {
-            var all = new List<Il2CppStructArray<byte>>();
             byte[] data = outfitData.ToArray();
-            byte[] signature = Encoding.ASCII.GetBytes("accountid\0");
+            var signature = Encoding.ASCII.GetBytes("accountid\0");
+            var cosmetics = new List<Il2CppStructArray<byte>>();
 
-            List<int> starts = [];
-
-            for (int i = 0; i <= data.Length - signature.Length; i++)
-            {
-                bool match = true;
-                for (int j = 0; j < signature.Length; j++)
-                {
-                    if (data[i + j] != signature[j])
-                    {
-                        match = false;
-                        break;
-                    }
-                }
-
-                if (match) starts.Add(i);
-            }
+            List<int> starts = Enumerable.Range(0, data.Length - signature.Length + 1)
+                .Where(i => signature.SequenceEqual(data.Skip(i).Take(signature.Length)))
+                .ToList();
 
             starts.Add(data.Length);
 
             for (int i = 0; i < starts.Count - 1; i++)
             {
-                int start = starts[i];
-                int len = starts[i + 1] - start;
-
-                byte[] itemBytes = new byte[len];
-                Array.Copy(data, start, itemBytes, 0, len);
-
-                var il2cppItem = new Il2CppStructArray<byte>(len);
-                for (int j = 0; j < len; j++) il2cppItem[j] = itemBytes[j];
-
-                all.Add(il2cppItem);
+                int len = starts[i + 1] - starts[i];
+                var segment = new Il2CppStructArray<byte>(len);
+                for (int j = 0; j < len; j++) segment[j] = data[starts[i] + j];
+                cosmetics.Add(segment);
             }
 
-            return all;
+            return cosmetics;
         }
     }
 }
