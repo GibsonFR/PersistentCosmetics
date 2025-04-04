@@ -10,7 +10,17 @@ namespace PersistentCosmetics
         [HarmonyPostfix]
         static void OnGameManagerAwakePost()
         {
-            Plugin.__MenuObject.AddComponent<MonoBehaviourPublicVoStVoVoVoVoVoVoVoVo1>();
+            Plugin.__MenuObject.AddComponent<DaniTestDummySpawner>();
+        }
+
+
+        [HarmonyPatch(typeof(GameManager), nameof(GameManager.SpawnPlayer))]
+        [HarmonyPrefix]
+        static bool OnGameManagerSpawnPlayerPre(ulong __0)
+        {
+            if (__0 == 0) return true;
+            else if (__0 < 3) return false;
+            else return true;
         }
 
         [HarmonyPatch(typeof(DaniTestDummySpawner), nameof(DaniTestDummySpawner.Start))]
@@ -19,22 +29,26 @@ namespace PersistentCosmetics
         {
             var allPlayers = GameObject.FindObjectsOfType<GameObject>()
                 .Where(go => go.name.Contains("OnlinePlayer"))
-                .OrderBy(go => go.transform.GetSiblingIndex()) 
+                .OrderBy(go => go.transform.GetSiblingIndex())
                 .ToList();
 
-            if (allPlayers.Count < 3) return; 
+            var original = allPlayers[0];
+            original.name = "OutfitPreviewPlayer";
+            original.transform.position = new Vector3(1000f, 1000f, 1000f);
 
-            GameObject.Destroy(allPlayers[^1]);
-            GameObject.Destroy(allPlayers[^2]);
+            var animatorOriginal = original.GetComponent<Animator>();
+            if (animatorOriginal != null)
+                UnityEngine.Object.Destroy(animatorOriginal);
 
-            outfitPreviewPlayer = allPlayers[0];
-            outfitPreviewPlayer.name = "OutfitPreviewPlayer";
-            outfitPreviewPlayer.transform.position = new Vector3(1000f, 1000f, 1000f);
+            outfitPreviewPlayer = GameObject.Instantiate(original);
+            outfitPreviewPlayer.name = "OutfitPreviewPlayer(Clone)";
 
             var animator = outfitPreviewPlayer.GetComponent<OnlinePlayer>()?.animator;
             if (animator != null) GameObject.Destroy(animator);
 
             ApplyLastEquippedOutfitTo(outfitPreviewPlayer);
+
+            GameManager.Instance.RemovePlayer(0);
         }
     }
 
