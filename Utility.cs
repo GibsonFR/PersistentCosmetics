@@ -97,7 +97,7 @@
             {
                 Dictionary<string, string> configDefaults = new()
                 {
-                    {"version", "v1.1.0"},
+                    {"version", "v1.1.2"},
                     {"menuKey", "insert"},
                     {"outfitsPerPage", "4"},
                     {"orbitSpeed", "72"},
@@ -155,7 +155,7 @@
 
                 string[] lines = File.ReadAllLines(configFilePath);
                 Dictionary<string, string> config = [];
-                CultureInfo cultureInfo = new CultureInfo("fr-FR");
+                CultureInfo cultureInfo = CultureInfo.InvariantCulture;
                 bool parseSuccess;
                 bool resultBool;
                 float resultFloat;

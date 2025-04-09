@@ -179,7 +179,7 @@ namespace PersistentCosmetics
         public static Dictionary<int, string> COSMETIC_DEFID_TO_CATEGORY = new()
         {
             // Hat
-            { 223, "Hat" }, { 222, "Hat" }, { 219, "Hat" }, { 220, "Hat" }, { 418, "Hat" },
+            { 223, "Hat" }, { 222, "Hat" }, { 219, "Hat" }, { 220, "Hat" },
             { 216, "Hat" }, { 200, "Hat" }, { 203, "Hat" }, { 215, "Hat" }, { 209, "Hat" },
             { 207, "Hat" }, { 212, "Hat" }, { 206, "Hat" }, { 201, "Hat" }, { 205, "Hat" },
             { 204, "Hat" }, { 208, "Hat" }, { 213, "Hat" }, { 214, "Hat" }, { 210, "Hat" },
@@ -196,6 +196,7 @@ namespace PersistentCosmetics
             { 411, "Face" }, { 408, "Face" }, { 403, "Face" }, { 414, "Face" }, { 416, "Face" },
             { 415, "Face" }, { 405, "Face" }, { 407, "Face" }, { 413, "Face" }, { 400, "Face" },
             { 402, "Face" }, { 401, "Face" }, { 409, "Face" }, { 410, "Face" }, { 406, "Face" },
+            { 418, "Face" },
 
             // Shoes
             { 611, "Shoes" }, { 610, "Shoes" }, { 612, "Shoes" }, { 608, "Shoes" }, { 607, "Shoes" },

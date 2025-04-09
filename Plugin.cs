@@ -19,7 +19,7 @@ global using static PersistentCosmetics.Utility;
 
 namespace PersistentCosmetics
 {
-    [BepInPlugin("9B8711D3-536E-4BB7-AD83-08F7EC9F02AJ", "PersistentCosmetics", "1.1.0")]
+    [BepInPlugin("9B8711D3-536E-4BB7-AD83-08F7EC9F02AJ", "PersistentCosmetics", "1.1.2")]
     public class Plugin : BasePlugin
     {
         public static Plugin Instance;

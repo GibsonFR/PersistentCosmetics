@@ -36,10 +36,6 @@ namespace PersistentCosmetics
             original.name = "OutfitPreviewPlayer";
             original.transform.position = new Vector3(1000f, 1000f, 1000f);
 
-            var animatorOriginal = original.GetComponent<Animator>();
-            if (animatorOriginal != null)
-                UnityEngine.Object.Destroy(animatorOriginal);
-
             outfitPreviewPlayer = GameObject.Instantiate(original);
             outfitPreviewPlayer.name = "OutfitPreviewPlayer(Clone)";
 

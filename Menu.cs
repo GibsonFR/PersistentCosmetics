@@ -4,6 +4,7 @@ using static PersistentCosmetics.MenuConstants;
 
 using static PersistentCosmetics.PersitentCosmeticsUtility;
 using Il2CppSystem.Dynamic.Utils;
+using static Il2CppSystem.Globalization.HebrewNumber;
 
 namespace PersistentCosmetics
 {
@@ -109,7 +110,7 @@ namespace PersistentCosmetics
 
             RefreshMainMenu();
 
-            if (autoEquipLastOutfit && currentSelectedOutfit.Length > 50) ClientSend.SendSerializedInventory(currentSelectedOutfit, currentSelectedOutfit.Length); 
+            if (autoEquipLastOutfit && currentSelectedOutfit != null && currentSelectedOutfit.Length > 50) ClientSend.SendSerializedInventory(currentSelectedOutfit, currentSelectedOutfit.Length);
         }
 
         void Start()
@@ -365,11 +366,13 @@ namespace PersistentCosmetics
             SaveToFile();
             RefreshMainMenu();
 
-            quitChat();
+            QuitChat(); // https://github.com/W-i-n-7
+
             return false;
         }
 
-        public static void quitChat()
+        // https://github.com/W-i-n-7
+        public static void QuitChat()
         {
             ChatBox.Instance.field_Private_Boolean_0 = false; // typing boolean
             ChatBox.Instance.inputField.text = "";
