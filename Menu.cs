@@ -365,7 +365,15 @@ namespace PersistentCosmetics
             SaveToFile();
             RefreshMainMenu();
 
+            quitChat();
             return false;
+        }
+
+        public static void quitChat()
+        {
+            ChatBox.Instance.field_Private_Boolean_0 = false; // typing boolean
+            ChatBox.Instance.inputField.text = "";
+            ChatBox.Instance.inputField.interactable = false;
         }
     }
 
